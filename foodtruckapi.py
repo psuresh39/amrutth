@@ -1,11 +1,13 @@
 import re
 import ConfigParser
 import json
+import redis
 from pymongo import MongoClient
 from geopy.geocoders import GoogleV3
 from geopy.distance import vincenty
 from geoip import geolite2
 from copy import copy
+from exceptions import MissingParameterError,InternalServerError, InvalidParameterError
 
 
 class FoodTrucks(object):
@@ -52,6 +54,12 @@ class FoodTrucks(object):
             out[x] = self.create_multidict(*args[1:])
         return out
 
+    def get_cache(self):
+        result = self.cache.get(self.query_parameter)
+        return result
+
+    def put_cache(self, result):
+        self.cache.put(self.query_parameter, result)
 
 class NearbyFoodTruckHandler(FoodTrucks):
 
