@@ -9,7 +9,7 @@ from geopy.geocoders import GoogleV3
 from geopy.distance import vincenty
 from geoip import geolite2
 from copy import copy
-from exceptions import MissingParameterError,InternalServerError, InvalidParameterError
+from exceptions import MissingParameterError, InternalServerError, InvalidParameterError
 import tornado.web
 import tornado.httpserver
 import tornado.ioloop
@@ -68,7 +68,8 @@ class FoodTrucks(object):
         return result
 
     def put_cache(self, result):
-        self.cache.put(self.query_parameter, result)
+        self.cache.set(self.query_parameter, result)
+
 
 class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
 
@@ -78,7 +79,6 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
     def get_correct_sort_order(self, geo_query_result):
 
         offset_query_result = list(geo_query_result[self.query_parameter["offset"]:])
-        result = []
         if not self.query_parameter["name"] and not self.query_parameter["fooditems"]:
                 result = offset_query_result
         else:
@@ -107,10 +107,7 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
         if self.query_parameter["location"]:
             if self.query_parameter["location"] == "current":
                 match = geolite2.lookup("127.0.0.1")
-                try:
-                    latitude, longitude = match.location
-                except Exception as e:
-                    print("Exception occured while guessing users ip address ", e)
+                latitude, longitude = match.location
             else:
                 address, (latitude, longitude) = self.geolocator.geocode(self.query_parameter["location"])
         elif self.query_parameter["point"]:
@@ -212,10 +209,13 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
         else:
             if self.query_parameter["location"] and self.query_parameter["bounds"] and self.query_parameter["point"]:
                 self.query_parameter["location"] = "current"
-            elif ((self.query_parameter["location"] and self.query_parameter["bounds"]) or
-                  (self.query_parameter["location"] and self.query_parameter["point"]) or
-                  (self.query_parameter["point"] and self.query_parameter["location"]) or
-                  (self.query_parameter["location"] and self.query_parameter["bounds"] and self.query_parameter["point"])):
+            elif (
+                    (self.query_parameter["location"] and self.query_parameter["bounds"])
+                    or (self.query_parameter["location"] and self.query_parameter["point"])
+                    or (self.query_parameter["point"] and self.query_parameter["location"])
+                    or (self.query_parameter["location"] and self.query_parameter["bounds"]
+                        and self.query_parameter["point"])
+            ):
                 raise MissingParameterError("location field is missing in query")
             else:
                 self.adjust_limit()
@@ -244,6 +244,7 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
             self.set_status(200)
             self.set_header('Content-type', 'text/plain')
             self.write(result)
+
 
 class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
 
@@ -337,7 +338,7 @@ if __name__ == "__main__":
         (r"/foodtruck", FoodTruckInfoHandler)
     ])
 
-    http_server = tornado.httpserver.HTTPServer(application, ssl_options={
+    https_server = tornado.httpserver.HTTPServer(application, ssl_options={
         "certfile": "/var/foodtruck/keys/ca.csr",
         "keyfile": "/var/foodtruck/keys/ca.key",
     })
