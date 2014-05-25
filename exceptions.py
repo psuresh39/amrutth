@@ -4,6 +4,7 @@ class Error(Exception):
 
 
 class MissingParameterError(Error):
+    code = 1001
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
@@ -11,6 +12,7 @@ class MissingParameterError(Error):
 
 
 class InvalidParameterError(Error):
+    code = 1001
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
@@ -18,6 +20,7 @@ class InvalidParameterError(Error):
 
 
 class InternalServerError(Error):
+    code = 1002
     def __init__(self, msg):
         self.msg = msg
     def __str__(self):
