@@ -16,6 +16,8 @@ import tornado.ioloop
 
 
 class FoodTrucks(object):
+    SUCCESS = 0
+    
     def __init__(self, config_file='amrutth_settings.ini'):
         self.client = MongoClient()
         self.db = self.client.test
@@ -62,6 +64,10 @@ class FoodTrucks(object):
     def generate_error(self, e):
         err = self.create_multidict(['error'], ['text'], [e.code, e.msg])
         return err
+
+    def generate_response(self, result):
+        res = self.create_multidict(['response', ['text'], [self.SUCCESS, result]])
+        return res
 
     def get_cache(self):
         result = self.cache.get(self.query_parameter)
@@ -235,15 +241,16 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
 
         try:
             result = self.search_food_truck()
-        except Exception as e:
-            self.set_status(200)
-            self.set_header('Content-type', 'text/plain')
+        except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
+            self.set_status(e.http_code)
+            self.set_header('Content-type', 'application/json')
             error = self.generate_error(e)
             self.write(error)
         else:
             self.set_status(200)
-            self.set_header('Content-type', 'text/plain')
-            self.write(result)
+            self.set_header('Content-type', 'application/json')
+            response = self.generate_response(result)
+            self.write(response)
 
 
 class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
@@ -298,15 +305,16 @@ class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
 
         try:
             result = self.get_individual_foodtruck()
-        except Exception as e:
-            self.set_status(200)
-            self.set_header('Content-type', 'text/plain')
+        except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
+            self.set_status(e.http_code)
+            self.set_header('Content-type', 'application/json')
             error = self.generate_error(e)
             self.write(error)
         else:
             self.set_status(200)
-            self.set_header('Content-type', 'text/plain')
-            self.write(result)
+            self.set_header('Content-type', 'spplicstion/json')
+            response = self.generate_response(result)
+            self.write(response)
 
     def authhandler(self):
         pass
