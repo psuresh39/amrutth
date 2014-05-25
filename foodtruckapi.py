@@ -2,12 +2,16 @@ import re
 import ConfigParser
 import json
 import redis
+import argparse
 from pymongo import MongoClient
 from geopy.geocoders import GoogleV3
 from geopy.distance import vincenty
 from geoip import geolite2
 from copy import copy
 from exceptions import MissingParameterError,InternalServerError, InvalidParameterError
+import tornado.web
+import tornado.httpserver
+import tornado.ioloop
 
 
 class FoodTrucks(object):
@@ -61,7 +65,7 @@ class FoodTrucks(object):
     def put_cache(self, result):
         self.cache.put(self.query_parameter, result)
 
-class NearbyFoodTruckHandler(FoodTrucks):
+class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
 
     def __init__(self):
         super(NearbyFoodTruckHandler, self).__init__()
@@ -218,8 +222,10 @@ class NearbyFoodTruckHandler(FoodTrucks):
                     self.put_cache(json.dumps(result))
                     return json.dumps(result)
 
+    def get(self):
+        pass
 
-class FoodTruckInfoHandler(FoodTrucks):
+class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
 
     def __init__(self):
         super(FoodTruckInfoHandler, self).__init__()
@@ -263,6 +269,9 @@ class FoodTruckInfoHandler(FoodTrucks):
                     self.put_cache(json.dumps(result))
                     return json.dumps(result)
 
+    def get(self):
+        pass
+
     def authhandler(self):
         pass
 
@@ -273,4 +282,33 @@ class FoodTruckInfoHandler(FoodTrucks):
         pass
 
 if __name__ == "__main__":
-    pass
+    bindport = 4545
+    bindhost = "0.0.0.0"
+    sslport = 4546
+    sslhost = "0.0.0.0"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-http", help="host:port for http connections")
+    parser.add_argument("-https", help="host:port for https connections")
+    args = parser.parse_args()
+
+    if args.http:
+        bindhost, bindport = args.http.split(":")
+
+    if args.https:
+        sslhost, sslport = args.https.split(":")
+
+    application = tornado.web.Application([
+        (r"/search", NearbyFoodTruckHandler),
+        (r"/foodtruck", FoodTruckInfoHandler)
+    ])
+
+    http_server = tornado.httpserver.HTTPServer(application, ssl_options={
+        "certfile": "/var/foodtruck/keys/ca.csr",
+        "keyfile": "/var/foodtruck/keys/ca.key",
+    })
+
+    http_server = tornado.httpserver.HTTPServer(application)
+
+    https_server.listen(sslhost, sslport)
+    http_server.listen(bindhost, bindport)
+    tornado.ioloop.IOLoop.instance().start()
