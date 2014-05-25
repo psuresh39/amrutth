@@ -3,6 +3,7 @@ import ConfigParser
 import json
 import redis
 import argparse
+import urlparse
 from pymongo import MongoClient
 from geopy.geocoders import GoogleV3
 from geopy.distance import vincenty
@@ -57,6 +58,10 @@ class FoodTrucks(object):
         for x in args[0]:
             out[x] = self.create_multidict(*args[1:])
         return out
+
+    def generate_error(self, e):
+        err = self.create_multidict(['error'], ['text'], [e.code, e.msg])
+        return err
 
     def get_cache(self):
         result = self.cache.get(self.query_parameter)
@@ -223,7 +228,22 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
                     return json.dumps(result)
 
     def get(self):
-        pass
+        url = urlparse.urlparse(self.request.uri)
+        query = urlparse.parse_qs(url.query)
+        for parameter, value in query.iteritems():
+            self.query_parameter[parameter] = value
+
+        try:
+            result = self.search_food_truck()
+        except Exception as e:
+            self.set_status(200)
+            self.set_header('Content-type', 'text/plain')
+            error = self.generate_error(e)
+            self.write(error)
+        else:
+            self.set_status(200)
+            self.set_header('Content-type', 'text/plain')
+            self.write(result)
 
 class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
 
@@ -270,7 +290,22 @@ class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
                     return json.dumps(result)
 
     def get(self):
-        pass
+        url = urlparse.urlparse(self.request.uri)
+        query = urlparse.parse_qs(url.query)
+        for parameter, value in query.iteritems():
+            self.query_parameter[parameter] = value
+
+        try:
+            result = self.get_individual_foodtruck()
+        except Exception as e:
+            self.set_status(200)
+            self.set_header('Content-type', 'text/plain')
+            error = self.generate_error(e)
+            self.write(error)
+        else:
+            self.set_status(200)
+            self.set_header('Content-type', 'text/plain')
+            self.write(result)
 
     def authhandler(self):
         pass
