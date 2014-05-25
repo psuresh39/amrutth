@@ -27,6 +27,7 @@ fh = log.handlers.RotatingFileHandler("log", maxBytes=1024*1024, backupCount=10)
 fh.setLevel(logging.DEBUG)
 log.addHandler(fh)
 
+
 class FoodTrucks(object):
     SUCCESS = 0
 
@@ -99,11 +100,11 @@ class FoodTrucks(object):
 class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
 
     def __init__(self):
-        self.debug("[NearbyFoodTruckHandler] Initializing")
+        log.debug("[NearbyFoodTruckHandler] Initializing")
         super(NearbyFoodTruckHandler, self).__init__()
 
     def get_correct_sort_order(self, geo_query_result):
-        self.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
+        log.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
         offset_query_result = list(geo_query_result[self.query_parameter["offset"]:])
         if not self.query_parameter["name"] and not self.query_parameter["fooditems"]:
                 result = offset_query_result
@@ -333,7 +334,6 @@ class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
         else:
             log.info("[FoodTruckInfoHandler] cache miss", self.query_parameter)
             if not self.query_parameter["name"]:
-                log.warning("[FoodTruckInfoHandler] Got exception processing request", e)
                 raise MissingParameterError("name field is missing in query")
             else:
                 self.adjust_limit()
@@ -343,7 +343,7 @@ class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
                     log.warning("[FoodTruckInfoHandler] Got exception processing request", e)
                     raise e
                 except Exception as e:
-                    log.error("[FoodTruckInfoHandler] Unexpected error occurred", e)
+                    log.error("[FoodTruckInfoHandler] Unexpected error occurred ", e)
                     raise InternalServerError
                 else:
                     log.debug("[FoodTruckInfoHandler] processed request, result received")
