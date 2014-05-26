@@ -10,7 +10,7 @@ from geopy.geocoders import GoogleV3
 from geopy.distance import vincenty
 from geoip import geolite2
 from copy import copy
-from exceptions import MissingParameterError, InternalServerError, InvalidParameterError
+from foodtruckexceptions import MissingParameterError, InternalServerError, InvalidParameterError
 import tornado.web
 import tornado.httpserver
 import tornado.ioloop
@@ -19,19 +19,19 @@ log = logging.getLogger("food_truck_logger")
 log.setLevel(logging.WARNING)
 log.propagate = False
 
-ch = log.StreamHandler()
+ch = logging.StreamHandler()
 ch.setLevel(logging.DEBUG)
 log.addHandler(ch)
 
-fh = log.handlers.RotatingFileHandler("log", maxBytes=1024*1024, backupCount=10)
+fh = logging.handlers.RotatingFileHandler("log", maxBytes=1024*1024, backupCount=10)
 fh.setLevel(logging.DEBUG)
 log.addHandler(fh)
 
 
-class FoodTrucks(object):
+class FoodTrucks(tornado.web.RequestHandler):
     SUCCESS = 0
 
-    def __init__(self, config_file='amrutth_settings.ini'):
+    def initialize(self, config_file="amrutth.settings.ini"):
         log.debug("[FoodTrucks] Initializing")
         self.client = MongoClient()
         self.db = self.client.test
@@ -57,11 +57,12 @@ class FoodTrucks(object):
             self._config.set('Query Options', 'status', json.dumps(None))
             self._config.set('Query Options', 'fooditems', json.dumps(None))
             with open(self._config_file, 'w') as configfile:
-                configfile.write(self._config_file)
+                self._config.write(configfile)
 
-        if self._config.has_section('Query Option'):
-            self.query_parameter = {option: json.loads(self._config.get("Query Option", option))
+        if self._config.has_section('Query Options'):
+            self.query_parameter = {option: json.loads(self._config.get("Query Options", option))
                                     for option in self._config.options('Query Options')}
+            
 
     def adjust_limit(self):
         log.debug("[FoodTrucks] Adjusting limit")
@@ -88,20 +89,24 @@ class FoodTrucks(object):
         return json.dumps(res)
 
     def get_cache(self):
-        log.debug("[FoodTrucks] Checking for key in cache", self.query_parameter)
-        result = self.cache.get(self.query_parameter)
-        return result
+        log.debug("[FoodTrucks] Checking for key {0} in cache".format(str(self.query_parameter)))
+        try:
+            result = json.loads(self.cache.get(self.query_parameter))
+        except Exception:
+            return None
+        else:
+            return result
 
     def put_cache(self, result):
-        log.debug("[FoodTrucks] Putting key in cache", self.query_parameter)
-        self.cache.set(self.query_parameter, result)
+        log.debug("[FoodTrucks] Putting key {0} in cache".format(str(self.query_parameter)))
+        self.cache.set(self.query_parameter, json.dumps(result))
 
 
-class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
+class NearbyFoodTruckHandler(FoodTrucks):
 
-    def __init__(self):
+    def initialize(self):
         log.debug("[NearbyFoodTruckHandler] Initializing")
-        super(NearbyFoodTruckHandler, self).__init__()
+        super(NearbyFoodTruckHandler, self).initialize()
 
     def get_correct_sort_order(self, geo_query_result):
         log.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
@@ -158,7 +163,7 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
         try:
             latitude, longitude = self.get_location_coordinates()
         except Exception as e:
-            log.error("[NearbyFoodTruckHandler] Unable to find coordinates", e)
+            log.error("[NearbyFoodTruckHandler] Unable to find coordinates: {0}".format(str(e)))
             raise InvalidParameterError("Unable to find location")
         try:
             query = self.generate_basic_bounds_query(latitude, longitude)
@@ -168,13 +173,13 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
             if self.query_parameter['status']:
                 query['status'] = self.query_parameter['status']
         except Exception as e:
-            log.error("[NearbyFoodTruckHandler] Error generating query", e)
+            log.error("[NearbyFoodTruckHandler] Error generating query: {0}".format(str(e)))
             raise InternalServerError("Error generating query")
 
         try:
             geo_query_result = self.foodtrucks.find(query).limit(self.query_parameter["limit"])
         except Exception as e:
-            log.error("[NearbyFoodTruckHandler] Error querying database", e)
+            log.error("[NearbyFoodTruckHandler] Error querying database: {0}".format(str(e)))
             raise InternalServerError("Error querying database")
         else:
             return geo_query_result
@@ -198,7 +203,7 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
         try:
             latitude, longitude = self.get_location_coordinates()
         except Exception as e:
-            log.error("[NearbyFoodTruckHandler] Unable to find location", e)
+            log.error("[NearbyFoodTruckHandler] Unable to find location: {0}".format(str(e)))
             raise InvalidParameterError("Unable to find location")
 
         try:
@@ -212,7 +217,7 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
             if self.query_parameter["status"]:
                 query["status"] = self.query_parameter["status"]
         except Exception as e:
-            log.error("[NearbyFoodTruckHandler] Error generating query", e)
+            log.error("[NearbyFoodTruckHandler] Error generating query: {0}".format(str(e)))
             raise InternalServerError("Error generating query")
 
         try:
@@ -244,10 +249,10 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
     def search_food_truck(self):
         result = self.get_cache()
         if result:
-            log.info("[NearbyFoodTruckHandler] Cache hit", self.query_parameter)
+            log.info("[NearbyFoodTruckHandler] Cache hit. Key={0}".format(str(self.query_parameter)))
             return result
         else:
-            log.info("[NearbyFoodTruckHandler] Cache miss", self.query_parameter)
+            log.info("[NearbyFoodTruckHandler] Cache miss. Key={0}".format(str(self.query_parameter)))
             if self.query_parameter["location"] and self.query_parameter["bounds"] and self.query_parameter["point"]:
                 self.query_parameter["location"] = "current"
             elif (
@@ -264,10 +269,10 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
                 try:
                     result = self.get_all_nearby_foodtrucks()
                 except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
-                    log.warning("[NearbyFoodTruckHandler] Error occurred processing request", e)
+                    log.warning("[NearbyFoodTruckHandler] Error occurred processing request: {0}".format(str(e)))
                     raise e
                 except Exception as e:
-                    log.error("[NearbyFoodTruckHandler] Unexpected error occurred", e)
+                    log.error("[NearbyFoodTruckHandler] Unexpected error occurred: {0}".format(str(e)))
                     raise InternalServerError
                 else:
                     log.debug("[NearbyFoodTruckHandler] processed request, result received")
@@ -294,11 +299,11 @@ class NearbyFoodTruckHandler(FoodTrucks, tornado.web.RequestHandler):
             self.write(response)
 
 
-class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
+class FoodTruckInfoHandler(FoodTrucks):
 
-    def __init__(self):
+    def initialize(self):
         log.debug("[FoodTruckInfoHandler] Initializing")
-        super(FoodTruckInfoHandler, self).__init__()
+        super(FoodTruckInfoHandler, self).initialize()
 
     def generate_basic_query(self):
         return self.create_multidict(["$text"], ["$search"], self.query_parameter["name"])
@@ -319,20 +324,20 @@ class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
 
         try:
             log.debug("[FoodTruckInfoHandler] Perform DB query")
-            result = self.foodtrucks.find(query).sort(sort_query).limit(self.query_parameter["limit"])
-        except Exception:
-            log.error("[FoodTruckInfoHandler] Error querying database")
+            result = self.foodtrucks.find({"$text":{"$search":self.query_parameter["name"]}}, {"score":{"$meta":"textScore"}}).sort([("score",{"$meta":"textScore"})]).limit(self.query_parameter["limit"])
+        except Exception as e:
+            log.error("[FoodTruckInfoHandler] Error querying database: {0}".format(str(e)))
             raise InternalServerError("Error querying database")
         else:
-            return result
+            return list(result)
 
     def get_individual_foodtruck(self):
-        result = self.get_cache()
-        if result:
-            log.info("[FoodTruckInfoHandler] cache hit", self.query_parameter)
-            return result
+        resultlist = self.get_cache()
+        if resultlist:
+            log.info("[FoodTruckInfoHandler] cache hit. Key={0}".format(str(self.query_parameter)))
+            return resultlist
         else:
-            log.info("[FoodTruckInfoHandler] cache miss", self.query_parameter)
+            log.info("[FoodTruckInfoHandler] cache miss. Key={0}".format(str(self.query_parameter)))
             if not self.query_parameter["name"]:
                 raise MissingParameterError("name field is missing in query")
             else:
@@ -340,37 +345,41 @@ class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
                 try:
                     result = self.get_foodtruck_info()
                 except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
-                    log.warning("[FoodTruckInfoHandler] Got exception processing request", e)
-                    raise e
+                    log.warning("[FoodTruckInfoHandler] Got exception processing request: {0}".format(str(e)))
+                    raise
                 except Exception as e:
-                    log.error("[FoodTruckInfoHandler] Unexpected error occurred ", e)
-                    raise InternalServerError
+                    log.error("[FoodTruckInfoHandler] Unexepcted error occurred: {0}".format(str(e)))
+                    raise
                 else:
-                    log.debug("[FoodTruckInfoHandler] processed request, result received")
-                    self.put_cache(result)
-                    return result
+                    log.debug("[FoodTruckInfoHandler] processed request, result received")      
+                    resultlist = []
+                    for key, value in enumerate(result):
+                        value["_id"] = key
+                        resultlist.append(value)
+                    self.put_cache(resultlist)
+                    return resultlist
 
     def get(self):
-        log.debug("[FoodTruckInfoHandler] Got request: ", self.request.uri)
+        log.debug("[FoodTruckInfoHandler] Got request: {0} ".format(str(self.request.uri)))
         url = urlparse.urlparse(self.request.uri)
         query = urlparse.parse_qs(url.query)
         for parameter, value in query.iteritems():
-            self.query_parameter[parameter] = value
+            self.query_parameter[parameter] = value[0]
 
-        log.debug("[FoodTruckInfoHandler] The query parameters are: ", self.query_parameter)
+        log.debug("[FoodTruckInfoHandler] The query parameters are: {0}".format(str(self.query_parameter)))
         try:
-            result = self.get_individual_foodtruck()
+            resultlist = self.get_individual_foodtruck()
         except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
-            log.warning("[FoodTruckInfoHandler] Got exception processing request", e)
+            log.warning("[FoodTruckInfoHandler] Got exception processing request: {0}".format(str(e)))
             self.set_status(e.http_code)
-            self.set_header('Content-type', 'application/json')
+            self.set_header('Content-type', 'text/plain')
             error = self.generate_error(e)
             self.write(error)
         else:
             log.debug("[FoodTruckInfoHandler] request processed successfully")
             self.set_status(200)
-            self.set_header('Content-type', 'spplicstion/json')
-            response = self.generate_response(result)
+            self.set_header('Content-type', 'text/plain')
+            response = self.generate_response(resultlist)
             self.write(response)
 
     def authhandler(self):
@@ -381,6 +390,11 @@ class FoodTruckInfoHandler(FoodTrucks, tornado.web.RequestHandler):
 
     def syncdatabase(self):
         pass
+
+
+class TestHandler(tornado.web.RequestHandler):
+    def get(self):
+        self.write("Hello, world")
 
 if __name__ == "__main__":
     bindport = 4545
@@ -404,18 +418,19 @@ if __name__ == "__main__":
 
     application = tornado.web.Application([
         (r"/search", NearbyFoodTruckHandler),
-        (r"/foodtruck", FoodTruckInfoHandler)
+        (r"/foodtruck", FoodTruckInfoHandler),
+        (r"/testhandler", TestHandler),
     ])
 
     https_server = tornado.httpserver.HTTPServer(application, ssl_options={
-        "certfile": "/var/foodtruck/keys/ca.csr",
-        "keyfile": "/var/foodtruck/keys/ca.key",
+        "certfile": "/etc/ssl/localcerts/tornado.pem",
+        "keyfile": "/etc/ssl/localcerts/tornado.key",
     })
 
     http_server = tornado.httpserver.HTTPServer(application)
 
     log.info("Starting web application: http/https servers and ioloop")
 
-    https_server.listen(sslhost, sslport)
-    http_server.listen(bindhost, bindport)
+    https_server.listen(sslport, sslhost)
+    http_server.listen(bindport, bindhost)
     tornado.ioloop.IOLoop.instance().start()
