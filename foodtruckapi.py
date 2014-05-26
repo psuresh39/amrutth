@@ -304,6 +304,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
                     raise InternalServerError("Unexpected internal server error")
                 else:
                     log.debug("[NearbyFoodTruckHandler] processed request, result received")
+                    for key, value in enumerate(resultlist[:]):
+                        resultlist[key]["_id"] = key
                     self.put_cache(resultlist)
                     return resultlist
 
