@@ -52,7 +52,6 @@ class FoodTrucks(tornado.web.RequestHandler):
             self._config.set('Query Options', 'sort', json.dumps(0))
             self._config.set('Query Options', 'category_filter', json.dumps(None))
             self._config.set('Query Options', 'radius_filter', json.dumps(None))
-            self._config.set('Query Options', 'max_distance', json.dumps(10))
             self._config.set('Query Options', 'name', json.dumps(None))
             self._config.set('Query Options', 'status', json.dumps(None))
             self._config.set('Query Options', 'fooditems', json.dumps(None))
@@ -65,7 +64,7 @@ class FoodTrucks(tornado.web.RequestHandler):
 
     def adjust_limit(self):
         log.debug("[FoodTrucks] Adjusting limit")
-        if self.query_parameter["limit"] > self.query_parameter["maxlimit"]:
+        if int(self.query_parameter["limit"]) > self.query_parameter["maxlimit"]:
                 self.query_parameter["limit"] = self.query_parameter["maxlimit"]
 
     def create_multidict(self, *args):
@@ -111,7 +110,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
 
     def get_correct_sort_order(self, geo_query_result_list):
         log.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
-        offset_query_result_list = geo_query_result_list[self.query_parameter["offset"]:]
+        offset_query_result_list = geo_query_result_list[int(self.query_parameter["offset"]):]
         if not self.query_parameter["name"] and not self.query_parameter["fooditems"]:
                 result_list = offset_query_result_list
         else:
@@ -125,7 +124,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
                            if re.search(fooditems_regex, foodtruck["fooditems"]) and
                            re.search(applicant_regex, foodtruck["applicant"])]
 
-            if self.query_parameter["sort"] == 1:
+            if int(self.query_parameter["sort"]) == 1:
                 if self.query_parameter["name"]:
                     result_list = sorted(result_list, key=lambda x: x["applicant"])
                 else:
@@ -185,7 +184,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
             raise InternalServerError("Error generating query")
 
         try:
-            geo_query_result = self.foodtrucks.find(query).limit(self.query_parameter["limit"])
+            geo_query_result = self.foodtrucks.find(query).limit(int(self.query_parameter["limit"]))
         except Exception as e:
             log.error("[NearbyFoodTruckHandler] Error querying database: {0}".format(str(e)))
             raise InternalServerError("Error querying database")
@@ -197,12 +196,9 @@ class NearbyFoodTruckHandler(FoodTrucks):
         return self.create_multidict(["loc"], ["$geoWithin"], ["$centerSphere"],
                                      [[longitude, latitude], float(self.query_parameter["radius_filter"]) / 3959])
 
-    def query_database(self, latitude, longitude, query_filters):
-            distance_query = {"loc": {"$near": [longitude, latitude],
-                                      "$maxDistance": float(self.query_parameter["max_distance"])/69}}
-            for key, value in query_filters.iteritems():
-                    distance_query[key] = value
-            return self.foodtrucks.find(distance_query).limit(self.query_parameter["limit"])
+    def generate_distance_query(self, latitude, longitude):
+	    log.debug("[NearbyFoodTruckHandler] Generate distance query")
+            return self.create_multidict(["loc"], ["$near"], [longitude, latitude])
 
     def get_trucks_near_point(self):
         log.debug("[NearbyFoodTruckHandler] Search near a point")
@@ -215,41 +211,26 @@ class NearbyFoodTruckHandler(FoodTrucks):
         self.query_parameter['latitude'] = latitude
         self.query_parameter['longitude'] = longitude
 
-        if self.query_parameter["radius_filter"]:
-            log.debug("[NearbyFoodTruckHandler] Search near a point as center")
-            try:
+        try:
+            if self.query_parameter["radius_filter"]:
                 query = self.generate_radius_query(latitude, longitude)
+            else:
+                query = self.generate_distance_query(latitude, longitude)
                 if self.query_parameter["category_filter"]:
                     query["facilitytype"] = self.query_parameter["category_filter"]
                 if self.query_parameter["status"]:
                     query["status"] = self.query_parameter["status"]
-            except Exception as e:
-                log.error("[NearbyFoodTruckHandler] Error generating radius filter query: {0}".format(str(e)))
-                raise e
+        except Exception as e:
+            log.error("[NearbyFoodTruckHandler] Error generating near point query: {0}".format(str(e)))
+            raise e
 
-            try:
-                geo_query_result = self.foodtrucks.find(query).limit(self.query_parameter["limit"])
-            except Exception as e:
-                log.error("[NearbyFoodTruckHandler] Error querying DB for radius filter query{0}".format(str(e)))
-                raise InternalServerError("Error querying database")
-            else:
-                return list(geo_query_result)
-
+        try:
+            geo_query_result = self.foodtrucks.find(query).limit(int(self.query_parameter["limit"]))
+        except Exception as e:
+            log.error("[NearbyFoodTruckHandler] Error querying DB for near point query {0}".format(str(e)))
+            raise InternalServerError("Error querying database")
         else:
-            log.debug("[NearbyFoodTruckHandler] Search near a point in any direction")
-            query_filters = {}
-            if self.query_parameter["category_filter"]:
-                query_filters["facilitytype"] = self.query_parameter["category_filter"]
-            if self.query_parameter["status"]:
-                query_filters["status"] = self.query_parameter["status"]
-
-            try:
-                    geo_query_result = self.query_database(latitude, longitude, query_filters)
-            except Exception as e:
-                log.error("[NearbyFoodTruckHandler] Error querying DB for distance query {0}".format(str(e)))
-                raise InternalServerError("Error querying database")
-            else:
-                return list(geo_query_result)
+            return list(geo_query_result)
 
     def get_all_nearby_foodtrucks(self):
         if not self.query_parameter["bounds"]:
@@ -341,7 +322,7 @@ class FoodTruckInfoHandler(FoodTrucks):
     def query_database(self):
         res = self.foodtrucks.find(
             {"$text": {"$search": self.query_parameter["name"]}}, {"score": {"$meta": "textScore"}}
-        ).sort([("score", {"$meta": "textScore"})]).limit(self.query_parameter["limit"])
+        ).sort([("score", {"$meta": "textScore"})]).limit(int(self.query_parameter["limit"]))
         return res
 
     def get_foodtruck_info(self):
@@ -435,7 +416,7 @@ if __name__ == "__main__":
         sslhost, sslport = args.https.split(":")
 
     application = tornado.web.Application([
-        (r"/search", NearbyFoodTruckHandler),
+        (r"/searchfood", NearbyFoodTruckHandler),
         (r"/foodtruck", FoodTruckInfoHandler),
     ])
 
