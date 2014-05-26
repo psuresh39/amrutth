@@ -107,27 +107,32 @@ class NearbyFoodTruckHandler(FoodTrucks):
         log.debug("[NearbyFoodTruckHandler] Initializing")
         super(NearbyFoodTruckHandler, self).initialize()
 
-    def get_correct_sort_order(self, geo_query_result):
+    def get_correct_sort_order(self, geo_query_result_list):
         log.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
-        offset_query_result = list(geo_query_result[self.query_parameter["offset"]:])
+        offset_query_result_list = geo_query_result_list[self.query_parameter["offset"]:]
         if not self.query_parameter["name"] and not self.query_parameter["fooditems"]:
-                result = offset_query_result
+                result_list = offset_query_result_list
         else:
             applicant = self.query_parameter["name"] or ".*"
             fooditems = self.query_parameter["fooditems"] or ".*"
-            result = [foodtruck for foodtruck in offset_query_result
-                      if re.search(fooditems, foodtruck["fooditems"]) and re.search(applicant, foodtruck["applicant"])]
+
+            applicant_regex = re.compile(applicant, re.IGNORECASE)
+            fooditems_regex = re.compile(fooditems, re.IGNORECASE)
+
+            result_list = [foodtruck for foodtruck in offset_query_result_list
+                           if re.search(fooditems_regex, foodtruck["fooditems"]) and
+                           re.search(applicant_regex, foodtruck["applicant"])]
 
             if self.query_parameter["sort"] == 1:
                 if self.query_parameter["name"]:
-                    result = sorted(result, key=lambda x: x["applicant"])
+                    result_list = sorted(result_list, key=lambda x: x["applicant"])
                 else:
-                    result = sorted(result, key=lambda x: x["fooditems"])
+                    result_list = sorted(result_list, key=lambda x: x["fooditems"])
 
-        for index, foodtruck in enumerate(result[:]):
-            result[index]["dis"] = vincenty((self.query_parameter["latitude"], self.query_parameter["longitude"]),
-                                            (result[index]["latitude"], result[index]["longitude"])).miles
-        return result
+        for index, foodtruck in enumerate(result_list[:]):
+            result_list[index]["dis"] = vincenty((self.query_parameter["latitude"], self.query_parameter["longitude"]),
+                                                 (result_list[index]["loc"][1], result_list[index]["loc"][0])).miles
+        return result_list
 
     def generate_basic_bounds_query(self, latitude, longitude):
         log.debug("[NearbyFoodTruckHandler] Generate basic bounds query")
@@ -139,14 +144,17 @@ class NearbyFoodTruckHandler(FoodTrucks):
         log.debug("[NearbyFoodTruckHandler] Get location coordinates")
         if self.query_parameter["location"]:
             if self.query_parameter["location"] == "current":
-                match = geolite2.lookup("127.0.0.1")
+                match = geolite2.lookup(self.request.remote_ip)
                 latitude, longitude = match.location
+                return float(latitude), float(longitude)
             else:
                 address, (latitude, longitude) = self.geolocator.geocode(self.query_parameter["location"])
+                return float(latitude), float(longitude)
         elif self.query_parameter["point"]:
             coordinates = self.query_parameter["point"].split(",")
-            latitude = float(coordinates[0])
-            longitude = float(coordinates[1])
+            latitude = coordinates[0]
+            longitude = coordinates[1]
+            return float(latitude), float(longitude)
         else:
             latitude = {}
             longitude = {}
@@ -154,8 +162,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
                 latlang = coordinate.split(",")
                 latitude[idx] = float(latlang[0])
                 longitude[idx] = float(latlang[1])
-
-        return latitude, longitude
+            return latitude, longitude
 
     def get_trucks_within_box(self):
         log.debug("[NearbyFoodTruckHandler] Search within bounded box")
@@ -172,7 +179,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
             if self.query_parameter['status']:
                 query['status'] = self.query_parameter['status']
         except Exception as e:
-            log.error("[NearbyFoodTruckHandler] Error generating query: {0}".format(str(e)))
+            log.error("[NearbyFoodTruckHandler] Error generating bounds query: {0}".format(str(e)))
             raise InternalServerError("Error generating query")
 
         try:
@@ -181,21 +188,19 @@ class NearbyFoodTruckHandler(FoodTrucks):
             log.error("[NearbyFoodTruckHandler] Error querying database: {0}".format(str(e)))
             raise InternalServerError("Error querying database")
         else:
-            return geo_query_result
+            return list(geo_query_result)
 
     def generate_radius_query(self, latitude, longitude):
         log.debug("[NearbyFoodTruckHandler] Generate radius query")
         return self.create_multidict(["loc"], ["$geoWithin"], ["$centerSphere"],
-                                     [[longitude, latitude], self.query_parameter["radius_filter"] / 3959])
+                                     [[longitude, latitude], float(self.query_parameter["radius_filter"]) / 3959])
 
-    def generate_distance_query(self, latitude, longitude):
-        log.debug("[NearbyFoodTruckHandler] Generate distance query")
-        loc_query = self.create_multidict(["loc"], ["$near"], [longitude, latitude])
-        distance_query = self.create_multidict(["$maxDistance"], self.query_parameter["max_distance"]/69)
-        for key, value in distance_query.iteritems():
-            loc_query[key] = value
-
-        return loc_query
+    def query_database(self, latitude, longitude, query_filters):
+            distance_query = {"loc": {"$near": [longitude, latitude],
+                                      "$maxDistance": float(self.query_parameter["max_distance"])/69}}
+            for key, value in query_filters.iteritems():
+                    distance_query[key] = value
+            return self.foodtrucks.find(distance_query).limit(self.query_parameter["limit"])
 
     def get_trucks_near_point(self):
         log.debug("[NearbyFoodTruckHandler] Search near a point")
@@ -205,87 +210,112 @@ class NearbyFoodTruckHandler(FoodTrucks):
             log.error("[NearbyFoodTruckHandler] Unable to find location: {0}".format(str(e)))
             raise InvalidParameterError("Unable to find location")
 
-        try:
-            if self.query_parameter["radius_filter"]:
+        self.query_parameter['latitude'] = latitude
+        self.query_parameter['longitude'] = longitude
+
+        if self.query_parameter["radius_filter"]:
+            log.debug("[NearbyFoodTruckHandler] Search near a point as center")
+            try:
                 query = self.generate_radius_query(latitude, longitude)
+                if self.query_parameter["category_filter"]:
+                    query["facilitytype"] = self.query_parameter["category_filter"]
+                if self.query_parameter["status"]:
+                    query["status"] = self.query_parameter["status"]
+            except Exception as e:
+                log.error("[NearbyFoodTruckHandler] Error generating radius filter query: {0}".format(str(e)))
+                raise e
+
+            try:
+                geo_query_result = self.foodtrucks.find(query).limit(self.query_parameter["limit"])
+            except Exception as e:
+                log.error("[NearbyFoodTruckHandler] Error querying DB for radius filter query{0}".format(str(e)))
+                raise InternalServerError("Error querying database")
             else:
-                query = self.generate_distance_query(latitude, longitude)
+                return list(geo_query_result)
 
-            if self.query_parameter["category_filter"]:
-                query["facilitytype"] = self.query_parameter["category_filter"]
-            if self.query_parameter["status"]:
-                query["status"] = self.query_parameter["status"]
-        except Exception as e:
-            log.error("[NearbyFoodTruckHandler] Error generating query: {0}".format(str(e)))
-            raise InternalServerError("Error generating query")
-
-        try:
-            geo_query_result = self.foodtrucks.find(query).limit(self.query_parameter["limit"])
-        except:
-            log.error("[NearbyFoodTruckHandler] Error querying DB")
-            raise InternalServerError("Error querying database")
         else:
-            return geo_query_result
+            log.debug("[NearbyFoodTruckHandler] Search near a point in any direction")
+            query_filters = {}
+            if self.query_parameter["category_filter"]:
+                query_filters["facilitytype"] = self.query_parameter["category_filter"]
+            if self.query_parameter["status"]:
+                query_filters["status"] = self.query_parameter["status"]
+
+            try:
+                    geo_query_result = self.query_database(latitude, longitude, query_filters)
+            except Exception as e:
+                log.error("[NearbyFoodTruckHandler] Error querying DB for distance query {0}".format(str(e)))
+                raise InternalServerError("Error querying database")
+            else:
+                return list(geo_query_result)
 
     def get_all_nearby_foodtrucks(self):
-        if self.query_parameter["bounds"]:
+        if not self.query_parameter["bounds"]:
             try:
-                geo_query_result = self.get_trucks_near_point()
-            except Exception:
-                raise
+                geo_query_result_list = self.get_trucks_near_point()
+            except Exception as e:
+                log.error("[NearbyFoodTruckHandler] Error getting results for point/loc: {}".format(str(e)))
+                raise e
+            try:
+                sorted_result_list = self.get_correct_sort_order(geo_query_result_list)
+            except Exception as e:
+                log.error("[NearbyFoodTruckHandler] Error sorting results: {}".format(str(e)))
+                return geo_query_result_list
+            else:
+                return sorted_result_list
         else:
             try:
-                geo_query_result = self.get_trucks_within_box()
-            except Exception:
-                raise
-        try:
-            sorted_result = self.get_correct_sort_order(geo_query_result)
-        except Exception:
-            log.error("[NearbyFoodTruckHandler] Error sorting results")
-            raise InternalServerError("Error performing sorting operation")
-        return sorted_result
+                geo_query_result_list = self.get_trucks_within_box()
+            except Exception as e:
+                log.error("[NearbyFoodTruckHandler] Error getting results for box: {}".format(str(e)))
+                raise e
+            else:
+                return geo_query_result_list
 
     def search_food_truck(self):
-        result = self.get_cache()
-        if result:
-            log.info("[NearbyFoodTruckHandler] Cache hit. Key={0}".format(str(self.query_parameter)))
-            return result
+        if (
+            (self.query_parameter["location"] and self.query_parameter["bounds"])
+            or (self.query_parameter["location"] and self.query_parameter["point"])
+            or (self.query_parameter["point"] and self.query_parameter["location"])
+            or (self.query_parameter["location"] and self.query_parameter["bounds"]
+                and self.query_parameter["point"])
+        ):
+                log.warning("[NearbyFoodTruckHandler] Invalid query parameters")
+                raise InvalidParameterError("multiple locations specified, cannot disambiguate")
         else:
-            log.info("[NearbyFoodTruckHandler] Cache miss. Key={0}".format(str(self.query_parameter)))
-            if self.query_parameter["location"] and self.query_parameter["bounds"] and self.query_parameter["point"]:
-                self.query_parameter["location"] = "current"
-            elif (
-                    (self.query_parameter["location"] and self.query_parameter["bounds"])
-                    or (self.query_parameter["location"] and self.query_parameter["point"])
-                    or (self.query_parameter["point"] and self.query_parameter["location"])
-                    or (self.query_parameter["location"] and self.query_parameter["bounds"]
-                        and self.query_parameter["point"])
-            ):
-                log.warning("[NearbyFoodTruckHandler] location field missing")
-                raise MissingParameterError("location field is missing in query")
+            resultlist = self.get_cache()
+            if resultlist:
+                log.info("[NearbyFoodTruckHandler] Cache hit. Key={0}".format(str(self.query_parameter)))
+                return resultlist
             else:
+                log.info("[NearbyFoodTruckHandler] Cache miss. Key={0}".format(str(self.query_parameter)))
+                if not self.query_parameter["location"] and not self.query_parameter["bounds"]\
+                        and not self.query_parameter["point"]:
+                    self.query_parameter["location"] = "current"
+
                 self.adjust_limit()
                 try:
-                    result = self.get_all_nearby_foodtrucks()
+                    resultlist = self.get_all_nearby_foodtrucks()
                 except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
                     log.warning("[NearbyFoodTruckHandler] Error occurred processing request: {0}".format(str(e)))
                     raise e
                 except Exception as e:
                     log.error("[NearbyFoodTruckHandler] Unexpected error occurred: {0}".format(str(e)))
-                    raise InternalServerError
+                    raise InternalServerError("Unexpected internal server error")
                 else:
                     log.debug("[NearbyFoodTruckHandler] processed request, result received")
-                    self.put_cache(result)
-                    return result
+                    self.put_cache(resultlist)
+                    return resultlist
 
     def get(self):
+        log.debug("[NearbyFoodTruckHandler] Got request: {0} ".format(str(self.request.uri)))
         url = urlparse.urlparse(self.request.uri)
         query = urlparse.parse_qs(url.query)
         for parameter, value in query.iteritems():
-            self.query_parameter[parameter] = value
+            self.query_parameter[parameter] = value[0]
 
         try:
-            result = self.search_food_truck()
+            resultlist = self.search_food_truck()
         except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
             self.set_status(e.http_code)
             self.set_header('Content-type', 'application/json')
@@ -294,7 +324,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
         else:
             self.set_status(200)
             self.set_header('Content-type', 'application/json')
-            response = self.generate_response(result)
+            response = self.generate_response(resultlist)
             self.write(response)
 
 
@@ -323,29 +353,30 @@ class FoodTruckInfoHandler(FoodTrucks):
     def get_individual_foodtruck(self):
         if not self.query_parameter["name"]:
             raise MissingParameterError("name field is missing in query")
-        resultlist = self.get_cache()
-        if resultlist:
-            log.info("[FoodTruckInfoHandler] cache hit. Key={0}".format(str(self.query_parameter)))
-            return resultlist
         else:
-            log.info("[FoodTruckInfoHandler] cache miss. Key={0}".format(str(self.query_parameter)))
-            self.adjust_limit()
-            try:
-                result = self.get_foodtruck_info()
-            except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
-                log.warning("[FoodTruckInfoHandler] Got exception processing request: {0}".format(str(e)))
-                raise e
-            except Exception as e:
-                log.error("[FoodTruckInfoHandler] Unexpected error occurred: {0}".format(str(e)))
-                raise InternalServerError("Unexpected internal server error")
-            else:
-                log.debug("[FoodTruckInfoHandler] processed request, result received")
-                resultlist = []
-                for key, value in enumerate(result):
-                    value["_id"] = key
-                    resultlist.append(value)
-                self.put_cache(resultlist)
+            resultlist = self.get_cache()
+            if resultlist:
+                log.info("[FoodTruckInfoHandler] cache hit. Key={0}".format(str(self.query_parameter)))
                 return resultlist
+            else:
+                log.info("[FoodTruckInfoHandler] cache miss. Key={0}".format(str(self.query_parameter)))
+                self.adjust_limit()
+                try:
+                    result = self.get_foodtruck_info()
+                except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
+                    log.warning("[FoodTruckInfoHandler] Got exception processing request: {0}".format(str(e)))
+                    raise e
+                except Exception as e:
+                    log.error("[FoodTruckInfoHandler] Unexpected error occurred: {0}".format(str(e)))
+                    raise InternalServerError("Unexpected internal server error")
+                else:
+                    log.debug("[FoodTruckInfoHandler] processed request, result received")
+                    resultlist = []
+                    for key, value in enumerate(result):
+                        value["_id"] = key
+                        resultlist.append(value)
+                    self.put_cache(resultlist)
+                    return resultlist
 
     def get(self):
         log.debug("[FoodTruckInfoHandler] Got request: {0} ".format(str(self.request.uri)))
