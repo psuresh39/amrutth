@@ -62,7 +62,6 @@ class FoodTrucks(tornado.web.RequestHandler):
         if self._config.has_section('Query Options'):
             self.query_parameter = {option: json.loads(self._config.get("Query Options", option))
                                     for option in self._config.options('Query Options')}
-            
 
     def adjust_limit(self):
         log.debug("[FoodTrucks] Adjusting limit")
@@ -305,26 +304,16 @@ class FoodTruckInfoHandler(FoodTrucks):
         log.debug("[FoodTruckInfoHandler] Initializing")
         super(FoodTruckInfoHandler, self).initialize()
 
-    def generate_basic_query(self):
-        return self.create_multidict(["$text"], ["$search"], self.query_parameter["name"])
-
-    def generate_sort_query(self):
-        return self.create_multidict(["score"], ["$meta"], "textScore")
+    def query_database(self):
+        res = self.foodtrucks.find(
+            {"$text": {"$search": self.query_parameter["name"]}}, {"score": {"$meta": "textScore"}}
+        ).sort([("score", {"$meta": "textScore"})]).limit(self.query_parameter["limit"])
+        return res
 
     def get_foodtruck_info(self):
         try:
-            log.debug("[FoodTruckInfoHandler] Generating query")
-            query = self.generate_basic_query()
-            sort_query = self.generate_sort_query()
-            for key, value in sort_query.iteritems():
-                query[key] = value
-        except Exception:
-            log.error("[FoodTruckInfoHandler] Error generating query")
-            raise InternalServerError("Error generating query")
-
-        try:
             log.debug("[FoodTruckInfoHandler] Perform DB query")
-            result = self.foodtrucks.find({"$text":{"$search":self.query_parameter["name"]}}, {"score":{"$meta":"textScore"}}).sort([("score",{"$meta":"textScore"})]).limit(self.query_parameter["limit"])
+            result = self.query_database()
         except Exception as e:
             log.error("[FoodTruckInfoHandler] Error querying database: {0}".format(str(e)))
             raise InternalServerError("Error querying database")
@@ -332,32 +321,31 @@ class FoodTruckInfoHandler(FoodTrucks):
             return list(result)
 
     def get_individual_foodtruck(self):
+        if not self.query_parameter["name"]:
+            raise MissingParameterError("name field is missing in query")
         resultlist = self.get_cache()
         if resultlist:
             log.info("[FoodTruckInfoHandler] cache hit. Key={0}".format(str(self.query_parameter)))
             return resultlist
         else:
             log.info("[FoodTruckInfoHandler] cache miss. Key={0}".format(str(self.query_parameter)))
-            if not self.query_parameter["name"]:
-                raise MissingParameterError("name field is missing in query")
+            self.adjust_limit()
+            try:
+                result = self.get_foodtruck_info()
+            except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
+                log.warning("[FoodTruckInfoHandler] Got exception processing request: {0}".format(str(e)))
+                raise e
+            except Exception as e:
+                log.error("[FoodTruckInfoHandler] Unexpected error occurred: {0}".format(str(e)))
+                raise InternalServerError("Unexpected internal server error")
             else:
-                self.adjust_limit()
-                try:
-                    result = self.get_foodtruck_info()
-                except (InternalServerError, InvalidParameterError, MissingParameterError) as e:
-                    log.warning("[FoodTruckInfoHandler] Got exception processing request: {0}".format(str(e)))
-                    raise
-                except Exception as e:
-                    log.error("[FoodTruckInfoHandler] Unexepcted error occurred: {0}".format(str(e)))
-                    raise
-                else:
-                    log.debug("[FoodTruckInfoHandler] processed request, result received")      
-                    resultlist = []
-                    for key, value in enumerate(result):
-                        value["_id"] = key
-                        resultlist.append(value)
-                    self.put_cache(resultlist)
-                    return resultlist
+                log.debug("[FoodTruckInfoHandler] processed request, result received")
+                resultlist = []
+                for key, value in enumerate(result):
+                    value["_id"] = key
+                    resultlist.append(value)
+                self.put_cache(resultlist)
+                return resultlist
 
     def get(self):
         log.debug("[FoodTruckInfoHandler] Got request: {0} ".format(str(self.request.uri)))
@@ -391,11 +379,6 @@ class FoodTruckInfoHandler(FoodTrucks):
     def syncdatabase(self):
         pass
 
-
-class TestHandler(tornado.web.RequestHandler):
-    def get(self):
-        self.write("Hello, world")
-
 if __name__ == "__main__":
     bindport = 4545
     bindhost = "0.0.0.0"
@@ -419,7 +402,6 @@ if __name__ == "__main__":
     application = tornado.web.Application([
         (r"/search", NearbyFoodTruckHandler),
         (r"/foodtruck", FoodTruckInfoHandler),
-        (r"/testhandler", TestHandler),
     ])
 
     https_server = tornado.httpserver.HTTPServer(application, ssl_options={
