@@ -90,7 +90,8 @@ class FoodTrucks(tornado.web.RequestHandler):
     def get_cache(self):
         log.debug("[FoodTrucks] Checking for key {0} in cache".format(str(self.query_parameter)))
         try:
-            result = json.loads(self.cache.get(self.query_parameter))
+            query_key = [(key, value) for key, value in sorted(self.query_parameter.iteritems())]
+            result = json.loads(self.cache.get(query_key))
         except Exception:
             return None
         else:
@@ -98,7 +99,8 @@ class FoodTrucks(tornado.web.RequestHandler):
 
     def put_cache(self, result):
         log.debug("[FoodTrucks] Putting key {0} in cache".format(str(self.query_parameter)))
-        self.cache.set(self.query_parameter, json.dumps(result))
+        query_key = [(key, value) for key, value in sorted(self.query_parameter.iteritems())]
+        self.cache.set(query_key, json.dumps(result))
 
 
 class NearbyFoodTruckHandler(FoodTrucks):
