@@ -57,6 +57,7 @@ class FoodTrucks(tornado.web.RequestHandler):
         self._config_file = config_file
         self._config = ConfigParser.RawConfigParser()
         self.query_parameter = {}
+        self.original_query_parameter = {}
         self.cache = redis.StrictRedis(host='localhost', port=6379, db=0)
         #create config file if not present
         if not self._config.read(self._config_file):
@@ -122,9 +123,9 @@ class FoodTrucks(tornado.web.RequestHandler):
         """Check Redis Cache
         @return:    value for key is present else None
         """
-        log.debug("[FoodTrucks] Checking for key {0} in cache".format(str(self.query_parameter)))
+        log.debug("[FoodTrucks] Checking for key {0} in cache".format(str(self.original_query_parameter)))
         try:
-            query_key = [(key, value) for key, value in sorted(self.query_parameter.iteritems())]
+            query_key = [(key, value) for key, value in sorted(self.original_query_parameter.iteritems())]
             result = json.loads(self.cache.get(query_key))
         except Exception:
             return None
@@ -136,8 +137,8 @@ class FoodTrucks(tornado.web.RequestHandler):
         @param result: The query result. The key is the query dict
         @return:
         """
-        log.debug("[FoodTrucks] Putting key {0} in cache".format(str(self.query_parameter)))
-        query_key = [(key, value) for key, value in sorted(self.query_parameter.iteritems())]
+        log.debug("[FoodTrucks] Putting key {0} in cache".format(str(self.original_query_parameter)))
+        query_key = [(key, value) for key, value in sorted(self.original_query_parameter.iteritems())]
         self.cache.set(query_key, json.dumps(result))
 
 
@@ -375,6 +376,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
         query = urlparse.parse_qs(url.query)
         for parameter, value in query.iteritems():
             self.query_parameter[parameter] = value[0]
+        self.original_query_parameter = self.query_parameter
 
         try:
             resultlist = self.search_food_truck()
@@ -450,6 +452,7 @@ class FoodTruckInfoHandler(FoodTrucks):
         query = urlparse.parse_qs(url.query)
         for parameter, value in query.iteritems():
             self.query_parameter[parameter] = value[0]
+        self.original_query_parameter = self.query_parameter
 
         log.debug("[FoodTruckInfoHandler] The query parameters are: {0}".format(str(self.query_parameter)))
         try:
