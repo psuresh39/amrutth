@@ -24,6 +24,8 @@ import tornado.web
 import tornado.httpserver
 import tornado.ioloop
 
+HTTP_DOCS_ROOT = "html"
+
 #loglevel can also be adjusted from commandline via -loglevel parameter
 log = logging.getLogger("food_truck_logger")
 log.setLevel(logging.INFO)
@@ -36,6 +38,13 @@ log.addHandler(ch)
 fh = logging.handlers.RotatingFileHandler("log", maxBytes=1024*1024, backupCount=10)
 fh.setLevel(logging.DEBUG)
 log.addHandler(fh)
+
+
+class APIDocsHtmlStaticFileHandler(tornado.web.StaticFileHandler):
+    def get_absolute_path(cls, root, path):
+        log.debug("[APIDocsHtmlStaticFileHandler] Serving Static File")
+        abspath = super(APIDocsHtmlStaticFileHandler, cls).get_absolute_path(root, path)
+        return abspath
 
 
 class FoodTrucks(tornado.web.RequestHandler):
@@ -501,6 +510,7 @@ if __name__ == "__main__":
     application = tornado.web.Application([
         (r"/searchfood", NearbyFoodTruckHandler),
         (r"/foodtruck", FoodTruckInfoHandler),
+        (r"/(.+)", APIDocsHtmlStaticFileHandler, {'path': HTTP_DOCS_ROOT}),
     ])
 
     https_server = tornado.httpserver.HTTPServer(application, ssl_options={
