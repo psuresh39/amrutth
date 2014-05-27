@@ -136,6 +136,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
             for index, foodtruck in enumerate(result_list[:]):
                 result_list[index]["dis"] = vincenty((self.latitude, self.longitude),
                                                  (result_list[index]["loc"][1], result_list[index]["loc"][0])).miles
+	    result_list = sorted(result_list, key=lambda x:x["dis"])
 
         return result_list
 
