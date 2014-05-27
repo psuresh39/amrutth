@@ -13,7 +13,7 @@ class MissingParameterError(FoodTruckError):
 
 
 class InvalidParameterError(FoodTruckError):
-    code = 1001
+    code = 1002
     http_code = 400
     def __init__(self, msg="parameter is invalid"):
         self.msg = msg
@@ -22,7 +22,7 @@ class InvalidParameterError(FoodTruckError):
 
 
 class InternalServerError(FoodTruckError):
-    code = 1002
+    code = 1003
     http_code = 500
     def __init__(self, msg="internal server error"):
         self.msg = msg
