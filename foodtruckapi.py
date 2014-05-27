@@ -36,6 +36,8 @@ class FoodTrucks(tornado.web.RequestHandler):
         self.client = MongoClient()
         self.db = self.client.test
         self.foodtrucks = self.db.foodtrucks
+        self.latitude =  ""
+        self.longitude = ""
         self.geolocator = GoogleV3()
         self._config_file = config_file
         self._config = ConfigParser.RawConfigParser()
@@ -108,7 +110,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
         log.debug("[NearbyFoodTruckHandler] Initializing")
         super(NearbyFoodTruckHandler, self).initialize()
 
-    def get_correct_sort_order(self, geo_query_result_list):
+    def query_filter_sort(self, geo_query_result_list):
         log.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
         offset_query_result_list = geo_query_result_list[int(self.query_parameter["offset"]):]
         if not self.query_parameter["name"] and not self.query_parameter["fooditems"]:
@@ -130,16 +132,12 @@ class NearbyFoodTruckHandler(FoodTrucks):
                 else:
                     result_list = sorted(result_list, key=lambda x: x["fooditems"])
 
-        for index, foodtruck in enumerate(result_list[:]):
-            result_list[index]["dis"] = vincenty((self.query_parameter["latitude"], self.query_parameter["longitude"]),
+        if not self.query_parameter["bounds"]:
+            for index, foodtruck in enumerate(result_list[:]):
+                result_list[index]["dis"] = vincenty((self.latitude, self.longitude),
                                                  (result_list[index]["loc"][1], result_list[index]["loc"][0])).miles
-        return result_list
 
-    def generate_basic_bounds_query(self, latitude, longitude):
-        log.debug("[NearbyFoodTruckHandler] Generate basic bounds query")
-        basic_bounds_query = self.create_multidict(['loc'], ['$geowithin'], ['$box'],
-                                                   [[longitude[0], latitude[0]], [longitude[1], latitude[1]]])
-        return basic_bounds_query
+        return result_list
 
     def get_location_coordinates(self):
         log.debug("[NearbyFoodTruckHandler] Get location coordinates")
@@ -164,6 +162,12 @@ class NearbyFoodTruckHandler(FoodTrucks):
                 latitude[idx] = float(latlang[0])
                 longitude[idx] = float(latlang[1])
             return latitude, longitude
+
+    def generate_basic_bounds_query(self, latitude, longitude):
+        log.debug("[NearbyFoodTruckHandler] Generate basic bounds query")
+        basic_bounds_query = self.create_multidict(['loc'], ['$geowithin'], ['$box'],
+                                                   [[longitude[0], latitude[0]], [longitude[1], latitude[1]]])
+        return basic_bounds_query
 
     def get_trucks_within_box(self):
         log.debug("[NearbyFoodTruckHandler] Search within bounded box")
@@ -197,8 +201,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
                                      [[longitude, latitude], float(self.query_parameter["radius_filter"]) / 3959])
 
     def generate_distance_query(self, latitude, longitude):
-	    log.debug("[NearbyFoodTruckHandler] Generate distance query")
-            return self.create_multidict(["loc"], ["$near"], [longitude, latitude])
+        log.debug("[NearbyFoodTruckHandler] Generate distance query")
+        return self.create_multidict(["loc"], ["$near"], [longitude, latitude])
 
     def get_trucks_near_point(self):
         log.debug("[NearbyFoodTruckHandler] Search near a point")
@@ -208,8 +212,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
             log.error("[NearbyFoodTruckHandler] Unable to find location: {0}".format(str(e)))
             raise InvalidParameterError("Unable to find location")
 
-        self.query_parameter['latitude'] = latitude
-        self.query_parameter['longitude'] = longitude
+        self.latitude = latitude
+        self.longitude = longitude
 
         try:
             if self.query_parameter["radius_filter"]:
@@ -239,21 +243,19 @@ class NearbyFoodTruckHandler(FoodTrucks):
             except Exception as e:
                 log.error("[NearbyFoodTruckHandler] Error getting results for point/loc: {}".format(str(e)))
                 raise e
-            try:
-                sorted_result_list = self.get_correct_sort_order(geo_query_result_list)
-            except Exception as e:
-                log.error("[NearbyFoodTruckHandler] Error sorting results: {}".format(str(e)))
-                return geo_query_result_list
-            else:
-                return sorted_result_list
         else:
             try:
                 geo_query_result_list = self.get_trucks_within_box()
             except Exception as e:
                 log.error("[NearbyFoodTruckHandler] Error getting results for box: {}".format(str(e)))
                 raise e
-            else:
-                return geo_query_result_list
+        try:
+            sorted_result_list = self.query_filter_sort(geo_query_result_list)
+        except Exception as e:
+            log.error("[NearbyFoodTruckHandler] Error sorting results: {}".format(str(e)))
+            return geo_query_result_list
+        else:
+            return sorted_result_list
 
     def search_food_truck(self):
         if (
