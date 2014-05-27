@@ -115,7 +115,7 @@ class MyHTTPTest(AsyncHTTPTestCase):
         json_response = json.loads(response.body)
         self.assertEqual(json_response["response"]["text"][0], 0)
         sorted_list = sorted(json_response["response"]["text"][1], key=lambda x:x["applicant"])
-        self.assertEqual("sorted_list", json_response["response"]["text"][1])
+        self.assertEqual(sorted_list, json_response["response"]["text"][1])
 
     def test_wrong_bounds_query(self):
         self.http_client.fetch(self.get_url('/searchfood?bounds=&category_filter=Truck&status=APPROVED'), self.stop)
