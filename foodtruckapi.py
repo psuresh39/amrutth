@@ -1,3 +1,12 @@
+"""
+Foodtruck API v1.0
+Features:
+    -Allows search for foodtruck by location (coordinates, place name or box boundary)
+    -Allows search a specific foodtruck by name
+    -Allows filtering by type, status, fooditems etc.
+    -Allows sorting by name, distance
+    -Allows specifying offsets and limits
+"""
 import re
 import ConfigParser
 import json
@@ -15,6 +24,7 @@ import tornado.web
 import tornado.httpserver
 import tornado.ioloop
 
+#loglevel can also be adjusted from commandline via -loglevel parameter
 log = logging.getLogger("food_truck_logger")
 log.setLevel(logging.INFO)
 log.propagate = False
@@ -29,9 +39,14 @@ log.addHandler(fh)
 
 
 class FoodTrucks(tornado.web.RequestHandler):
+    """Base class with common methods used by both handlers
+    """
     SUCCESS = 0
 
     def initialize(self, config_file="amrutth.settings.ini"):
+        """Base handler constructor. This is called by children
+         @param config_file:    name of file to store default config options
+        """
         log.debug("[FoodTrucks] Initializing")
         self.client = MongoClient()
         self.db = self.client.test
@@ -43,6 +58,7 @@ class FoodTrucks(tornado.web.RequestHandler):
         self._config = ConfigParser.RawConfigParser()
         self.query_parameter = {}
         self.cache = redis.StrictRedis(host='localhost', port=6379, db=0)
+        #create config file if not present
         if not self._config.read(self._config_file):
             self._config.add_section('Query Options')
             self._config.set('Query Options', 'location', json.dumps(None))
@@ -65,11 +81,17 @@ class FoodTrucks(tornado.web.RequestHandler):
                                     for option in self._config.options('Query Options')}
 
     def adjust_limit(self):
+        """Adjust limit to max 100 in case user asks for more
+        """
         log.debug("[FoodTrucks] Adjusting limit")
         if int(self.query_parameter["limit"]) > self.query_parameter["maxlimit"]:
                 self.query_parameter["limit"] = self.query_parameter["maxlimit"]
 
     def create_multidict(self, *args):
+        """Creates a multilevel dict
+        @param *args:   Hierarchical list of keys and values
+        @return:    a multilevel dict
+        """
         log.debug("[FoodTrucks] Creating query string")
         if len(args) == 1:
             return copy(args[0])
@@ -79,16 +101,27 @@ class FoodTrucks(tornado.web.RequestHandler):
         return out
 
     def generate_error(self, e):
+        """Generate Json Error string
+        @param e:   foodtruck result list
+        @return:    json object
+        """
         log.debug("[FoodTrucks] Generating json error")
         err = self.create_multidict(['error'], ['text'], [e.code, e.msg])
         return json.dumps(err)
 
     def generate_response(self, result):
+        """Generate Json Response string
+        @param result:   foodtruck result list
+        @return:    json object
+        """
         log.debug("[FoodTrucks] Generating json response")
         res = self.create_multidict(['response'], ['text'], [self.SUCCESS, result])
         return json.dumps(res)
 
     def get_cache(self):
+        """Check Redis Cache
+        @return:    value for key is present else None
+        """
         log.debug("[FoodTrucks] Checking for key {0} in cache".format(str(self.query_parameter)))
         try:
             query_key = [(key, value) for key, value in sorted(self.query_parameter.iteritems())]
@@ -99,18 +132,27 @@ class FoodTrucks(tornado.web.RequestHandler):
             return result
 
     def put_cache(self, result):
+        """Put key,value pair in cache
+        @param result: The query result. The key is the query dict
+        @return:
+        """
         log.debug("[FoodTrucks] Putting key {0} in cache".format(str(self.query_parameter)))
         query_key = [(key, value) for key, value in sorted(self.query_parameter.iteritems())]
         self.cache.set(query_key, json.dumps(result))
 
 
 class NearbyFoodTruckHandler(FoodTrucks):
-
+    """Handler for searching for foodtrucks by location
+    """
     def initialize(self):
         log.debug("[NearbyFoodTruckHandler] Initializing")
         super(NearbyFoodTruckHandler, self).initialize()
 
     def query_filter_sort(self, geo_query_result_list):
+        """Performs filtering and sorting as requested
+        @param geo_query_result_list:   result list from geo query
+        @return:    filtered and sorted list
+        """
         log.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
         offset_query_result_list = geo_query_result_list[int(self.query_parameter["offset"]):]
         if not self.query_parameter["name"] and not self.query_parameter["fooditems"]:
@@ -135,13 +177,16 @@ class NearbyFoodTruckHandler(FoodTrucks):
         if not self.query_parameter["bounds"]:
             for index, foodtruck in enumerate(result_list[:]):
                 result_list[index]["dis"] = vincenty((self.latitude, self.longitude),
-                                                 (result_list[index]["loc"][1], result_list[index]["loc"][0])).miles
-	    if int(self.query_parameter["sort"]) == 0:
-	    	result_list = sorted(result_list, key=lambda x:x["dis"])
+                                                    (result_list[index]["loc"][1], result_list[index]["loc"][0])).miles
+        if int(self.query_parameter["sort"]) == 0:
+            result_list = sorted(result_list, key=lambda x: x["dis"])
 
         return result_list
 
     def get_location_coordinates(self):
+        """Get lat/lang for different cases eg: location="21st&Market,SF"
+        @return:    latitude, longitude. In case of bounds query they are dicts
+        """
         log.debug("[NearbyFoodTruckHandler] Get location coordinates")
         if self.query_parameter["location"]:
             if self.query_parameter["location"] == "current":
@@ -166,12 +211,19 @@ class NearbyFoodTruckHandler(FoodTrucks):
             return latitude, longitude
 
     def generate_basic_bounds_query(self, latitude, longitude):
+        """Helper function to generate query
+        @param latitude:    latitude of location
+        @param longitude:   longitude of location
+        @return:    MongoDB query
+        """
         log.debug("[NearbyFoodTruckHandler] Generate basic bounds query")
         basic_bounds_query = self.create_multidict(['loc'], ['$geoWithin'], ['$box'],
                                                    [[longitude[0], latitude[0]], [longitude[1], latitude[1]]])
         return basic_bounds_query
 
     def get_trucks_within_box(self):
+        """Handle bounds query i.e bounds=bottom left|top right coordinates
+        """
         log.debug("[NearbyFoodTruckHandler] Search within bounded box")
         try:
             latitude, longitude = self.get_location_coordinates()
@@ -198,15 +250,27 @@ class NearbyFoodTruckHandler(FoodTrucks):
             return list(geo_query_result)
 
     def generate_radius_query(self, latitude, longitude):
+        """Generate radius query
+        @param latitude:    latitude of location
+        @param longitude:   longitude of location
+        @return:    MongoDB query
+        """
         log.debug("[NearbyFoodTruckHandler] Generate radius query")
         return self.create_multidict(["loc"], ["$geoWithin"], ["$centerSphere"],
                                      [[longitude, latitude], float(self.query_parameter["radius_filter"]) / 3959])
 
     def generate_distance_query(self, latitude, longitude):
+        """Generate distance query
+        @param latitude:    latitude of location
+        @param longitude:   longitude of location
+        @return:    MongoDB query
+        """
         log.debug("[NearbyFoodTruckHandler] Generate distance query")
         return self.create_multidict(["loc"], ["$near"], [longitude, latitude])
 
     def get_trucks_near_point(self):
+        """Handle queries like location="21st and Market , SF" or point=lat,lang
+        """
         log.debug("[NearbyFoodTruckHandler] Search near a point")
         try:
             latitude, longitude = self.get_location_coordinates()
@@ -218,8 +282,10 @@ class NearbyFoodTruckHandler(FoodTrucks):
         self.longitude = longitude
 
         try:
+            #For 360 direction around point
             if self.query_parameter["radius_filter"]:
                 query = self.generate_radius_query(latitude, longitude)
+            #Can be in any one or more directions from point
             else:
                 query = self.generate_distance_query(latitude, longitude)
 
@@ -240,6 +306,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
             return list(geo_query_result)
 
     def get_all_nearby_foodtrucks(self):
+        """Helper to delegate query to bounds or point functions. Also sorts/filters results
+        """
         if not self.query_parameter["bounds"]:
             try:
                 geo_query_result_list = self.get_trucks_near_point()
@@ -261,6 +329,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
             return sorted_result_list
 
     def search_food_truck(self):
+        """Check cache, send query to get_all_nearby_foodtrucks if needed, put in cache
+        """
         if (
             (self.query_parameter["location"] and self.query_parameter["bounds"])
             or (self.query_parameter["location"] and self.query_parameter["point"])
@@ -298,6 +368,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
                     return resultlist
 
     def get(self):
+        """Handle incoming queries. Writes result back to socket
+        """
         log.debug("[NearbyFoodTruckHandler] Got request: {0} ".format(str(self.request.uri)))
         url = urlparse.urlparse(self.request.uri)
         query = urlparse.parse_qs(url.query)
@@ -319,7 +391,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
 
 
 class FoodTruckInfoHandler(FoodTrucks):
-
+    """Handles individual requests
+    """
     def initialize(self):
         log.debug("[FoodTruckInfoHandler] Initializing")
         super(FoodTruckInfoHandler, self).initialize()
@@ -341,6 +414,7 @@ class FoodTruckInfoHandler(FoodTrucks):
             return list(result)
 
     def get_individual_foodtruck(self):
+        """Checks cache, queries database if needed, puts in cache"""
         if not self.query_parameter["name"]:
             raise MissingParameterError("name field is missing in query")
         else:
@@ -369,6 +443,8 @@ class FoodTruckInfoHandler(FoodTrucks):
                     return resultlist
 
     def get(self):
+        """Handles all incoming queries and writes result back to socket
+        """
         log.debug("[FoodTruckInfoHandler] Got request: {0} ".format(str(self.request.uri)))
         url = urlparse.urlparse(self.request.uri)
         query = urlparse.parse_qs(url.query)
@@ -390,15 +466,6 @@ class FoodTruckInfoHandler(FoodTrucks):
             self.set_header('Content-type', 'text/plain')
             response = self.generate_response(resultlist)
             self.write(response)
-
-    def authhandler(self):
-        pass
-
-    def generalapilists(self):
-        pass
-
-    def syncdatabase(self):
-        pass
 
 if __name__ == "__main__":
     bindport = 4545
