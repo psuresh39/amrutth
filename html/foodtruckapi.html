@@ -1,0 +1,382 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html class="js"><head>
+        <script src="foodtruckapi_files/ga.js" async="" type="text/javascript"></script><script type="text/javascript">(function(H){H.className=H.className.replace(/\bno-js\b/,'js')})(document.documentElement)</script>
+        <title>
+        API 2.0: Business API | Yelp for Developers
+        </title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        
+        <meta http-equiv="imagetoolbar" content="no">
+        <meta name="description" content="Business API">
+        <link rel="stylesheet" type="text/css" media="all" href="foodtruckapi_files/developers-pkg-en_US.css">
+
+<script type="text/javascript">
+            window.yelp = window.yelp || {};
+            window.yelp.config = {"isReadOnlyMode": false, "isSitRepEnabled": false, "isClientErrorsEnabled": false, "enabledSitRepChannels": {}, "uniqueRequestID": "9a5cddbcff216b59", "isLoggedIn": false};
+                window._gaq = window._gaq || [];
+    _gaq.push(
+        ['_setAccount', "UA-30501-1"],
+        ['_trackPageview']
+    );
+
+
+</script>
+
+        <script>
+            (function() {
+                var main = null;
+
+                var main=function(e,c,d,b,a,f){window.Yelp=window.Yelp||{};window.yelp=window.yelp||{};window.yelp.config=window.yelp.config||{};window.yelp.config.imagesHostUrl=e;window.yelp.config.biz_domain=c;window.yelp.config.img_serial=d;window.yelp.config.unique_request_id=b;window.yelp.config.cookie_domain=a;window.yelp.lang=yelp.lang||{};window.yelp.lang.language=f};
+
+                if (main === null) {
+                    throw 'invalid inline script, missing main declaration.';
+                }
+                main("http://media1.ak.yelpcdn.com/", "biz.yelp.com", "20130813", "9a5cddbcff216b59", ".www.yelp.com", "en");
+            })();
+    </script>
+
+            <script src="foodtruckapi_files/www-pkg-en_US.js" type="text/javascript"></script>
+
+<!--[if lte IE 7]>
+<style type="text/css">
+#section_content code{height:35px;overflow:scroll;}
+#section_content code.sample_response{height:600px;}
+</style>
+<![endif]-->
+
+    </head>
+
+<body class="borderless">
+    <div id="wrap" class="developers">
+        <div id="masthead" class="clearfix">
+            <h1>
+             
+            </h1>
+
+            <div id="nav-bar" class="clearfix">
+                <ul>
+
+                        <li class="tabon" id="documentation"><a href="file:overview.html"><b>API v1.0 Documentation</b></a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="alert-container">
+        </div>
+
+    <div id="container" class="getting-started">
+        <div id="main" class="column">
+<h1>Foodtruck API</h1>
+
+<h3>Request</h3>
+<table cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th class="odd">Name</th>
+            <th>Method</th>
+            <th class="odd" width="50%">Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>/foodtruck</td>
+            <td>GET</td>
+            <td>Lookup foodtruck information.</td>
+        </tr>
+    </tbody>
+</table>
+
+
+<h3 id="searchGP">General Search Parameters</h3>
+<table cellspacing="0" cellpadding="5">
+    <tbody>
+        <tr>
+            <th class="odd">Name</th>
+            <th>Data Type</th>
+            <th class="odd">Required / Optional</th>
+            <th width="50%">Description</th>
+        </tr>
+        <tr>
+            <td>name</td>
+            <td>string</td>
+            <td>required</td>
+            <td>Search food truck by name (e.g. "Cupcake", "Mexican"). This is a required field.</td>
+        </tr>
+</tbody>
+</table>
+
+
+<h4>Sample Request:</h4>
+<code>http://amrutth.goz.cm/foodtruck?name=Mang%20Hang</code>
+
+
+<h3 id="rValue">Response Value:</h3>
+
+<table cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th class="odd">Name</th>
+            <th>Type</th>
+            <th class="odd" width="30%">Definition</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>response</td>
+            <td>dict</td>
+            <td>Contains the result</td>
+        </tr>
+        <tr>
+            <td>response.text</td>
+            <td>dict</td>
+            <td>Contains the return code and list of foodtruck objects</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4 id="business">Foodtruck: The list within response.text cantains return code and list of food truck objects. Below is the values for for a single foodtruck object</h4>
+
+<table cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th class="odd">Name</th>
+            <th>Type</th>
+            <th class="odd" width="50%">Definition</th>
+        </tr>
+    </thead>
+    <tbody>
+      <tr>
+    <td>objectid</td>
+    <td>string</td>
+    <td>Amrutth ID for this foodtruck</td>
+</tr>
+<tr>
+    <td>fooditems</td>
+    <td>string</td>
+    <td>Fooditems sold by foodtruck</td>
+</tr>
+<tr>
+    <td>facilitytype</td>
+    <td>string</td>
+    <td>Type of foodtruck eg truck or push cart</td>
+</tr>
+<tr>
+    <td>loc</td>
+    <td>list</td>
+    <td>Contains longitude and latitude</td>
+</tr>
+<tr>
+    <td>priorpermit</td>
+    <td>string</td>
+    <td>Data provided by <a href="http://www.datasf.org/">DataSF: Food Trucks</a></td>
+</tr>
+<tr>
+    <td>location</td>
+    <td>dict</td>
+    <td>Contains latitude, longitude and needs_recording</td>
+</tr>
+<tr>
+    <td>location.longitude</td>
+    <td>string</td>
+    <td>longitude of location</td>
+</tr>
+<tr>
+    <td>location.latitude</td>
+    <td>string</td>
+    <td>latitude of location</td>
+</tr>
+<tr>
+    <td>location.needs_recording</td>
+    <td>boolean</td>
+    <td>Data provided by <a href="http://www.datasf.org/">DataSF: Food Trucks</td>
+</tr>
+<tr>
+    <td>lot</td>
+    <td>string</td>
+    <td>lot number</td>
+</tr>
+<tr>
+    <td>cnn</td>
+    <td>string</td>
+    <td>cnn number.Data provided by <a href="http://www.datasf.org/">DataSF: Food Trucks </td>
+</tr>
+<tr>
+    <td>status</td>
+    <td>string</td>
+    <td>status of permit</td>
+</tr>
+<tr>
+    <td>schedule</td>
+    <td>string</td>
+    <td>Link to foodtruck schedule</td>
+</tr>
+<tr>
+    <td>locationdescription</td>
+    <td>string</td>
+    <td>Location information</td>
+</tr>
+<tr>
+    <td>latitude</td>
+    <td>string</td>
+    <td>latitude. Data provided by <a href="http://www.datasf.org/">DataSF: Food Trucks</td>
+</tr>
+<tr>
+    <td>blocklot</td>
+    <td>string</td>
+    <td>blocklot number</td>
+</tr>
+<tr>
+    <td>address</td>
+    <td>string</td>
+    <td>address of foodtruck location</td>
+</tr>
+<tr>
+    <td>approved</td>
+    <td>string</td>
+    <td>time when permit was approved</td>
+</tr>
+<tr>
+    <td>received</td>
+    <td>string</td>
+    <td>time when application is received</td>
+</tr>
+<tr>
+    <td>applicant</td>
+    <td>string</td>
+    <td>Name of registered foodtruck</td>
+</tr>
+<tr>
+    <td>longitude</td>
+    <td>string</td>
+    <td>longitude.Data provided by <a href="http://www.datasf.org/">DataSF: Food Trucks</td>
+</tr>
+<tr>
+    <td>expirationdate</td>
+    <td>string</td>
+    <td>Date permit expires</td>
+</tr>
+<tr>
+    <td>permit</td>
+    <td>string</td>
+    <td>permit number</td>
+</tr>
+<tr>
+    <td>x</td>
+    <td>string</td>
+    <td>x coordinates.Data provided by <a href="http://www.datasf.org/">DataSF: Food Trucks </td>
+</tr>
+<tr>
+    <td>y</td>
+    <td>string</td>
+    <td>y coordinates.Data provided by <a href="http://www.datasf.org/">DataSF: Food Trucks</td>
+</tr>
+<tr>
+    <td>block</td>
+    <td>string</td>
+    <td>block number</td>
+</tr>
+<tr>
+    <td>_id</td>
+    <td>number</td>
+    <td>id of foodtruck in return list. Max value is number of returned foodtrucks - 1</td>
+</tr>
+
+
+    </tbody>
+</table>
+
+
+<h3 id="sampleResponse">Sample Response (for foodtruck?name=Mang Hang&limit=1):</h3>
+
+<code class="sample_response">
+{
+    "response":
+        {
+            "text": 
+                [
+                    0, [
+                            {
+                                "objectid": "427358", 
+                                "fooditems": "COLD TRUCK. Deli: bbq chicken skewer: Chinese spring roll: Chinese fried rice/noodle: fried chicken leg/wing: bbq chicken sandwich: 
+                                              chicken cheese burger: burrito: lumpia. Snack: sunflower seeds: muffins: chips: snickers: kit-kat: 10 types of chocolate. Drinks: 
+                                              Coke: 7-Up: Dr. Pepper: Pepsi: Redbull: Vitamin Water: Rockstar: Coconut Juice: Water. Hot drinks: coffee: tea.", 
+                                "facilitytype": "Truck", 
+                                "loc": [-122.418405351773, 37.784420750676], 
+                                "priorpermit": "1", 
+                                "location": {
+                                    "latitude": "37.784420750676", 
+                                    "needs_recoding": false, 
+                                    "longitude": "-122.418405351773"
+                                }, 
+                                "lot": "006", 
+                                "cnn": "5178000", 
+                                "status": "EXPIRED",
+                                "schedule": "http://bsm.sfdpw.org/PermitsTracker/reports/
+                                             report.aspx?title=schedule&report=rptSchedule&params=permit=13MFF-0039&ExportPDF=1&Filename=13MFF-0039_schedule.pdf", 
+                                "locationdescription": "ELLIS ST: LARKIN ST to POLK ST (700 - 799)", 
+                                "latitude": "37.7844207368995", 
+                                "blocklot": "0717006", 
+                                "address": "730 ELLIS ST", 
+                                "approved": "2013-10-22T11:40:23", 
+                                "received": "Mar 12 2013 10:39AM", 
+                                "applicant": "Mang Hang Catering", 
+                                "longitude": "-122.418405351782", 
+                                "expirationdate": "2014-03-15T00:00:00", 
+                                "permit": "13MFF-0039", 
+                                "y": "2113769.269", 
+                                "x": "6007315.572", 
+                                "_id": 0, 
+                                "block": "0717"
+                            }
+                     ]
+                ]
+        }
+}
+
+</code>
+        </div>
+        <div id="side" class="column">
+                <ul>
+    <li class="sidebar-title"><b>API v1.0</b></li>
+        <li><a href="overview.html">Overview</a></li>
+        <li> <a href="search.html">Search API</a></li>
+        <li>&gt;<a href="foodtruckapi.html">Foodtruck API</a></li>
+        <li><a href="errors.html">Errors</a></li>
+    <li class="sidebar-title"><b>General</b></li>
+        <li><a href="all_category_list.html">All Category List</a></li>
+        <li><a href="examples.html">Examples</a></li>
+    </ul>
+
+        </div>
+    </div>
+
+
+    <div id="footer">
+   
+    </div>
+
+    </div>
+<script type="text/javascript">
+        
+                (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = "http://www.google-analytics.com/ga.js";
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+        })();
+
+
+</script>
+
+        <script type="text/javascript">
+            yelp.async.Script.load((document.location.protocol == 'https:' ? 'https://sb' : 'http://b') + '.scorecardresearch.com/beacon.js', function() {
+                if (window.COMSCORE && window.COMSCORE['beacon']) {
+                    window.COMSCORE['beacon']({"c15": "", "c3": "", "c2": 7130511, "c1": 2, "c6": "", "c5": "", "c4": ""});
+                }
+            });
+
+</script>
+
+        <noscript><img src="http://b.scorecardresearch.com/p?cj=1&amp;c15=&amp;c3=&amp;c2=7130511&amp;c1=2&amp;c6=&amp;c5=&amp;c4="></noscript>
+
+
+</body></html>
