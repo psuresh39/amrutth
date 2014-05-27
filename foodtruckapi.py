@@ -16,7 +16,7 @@ import tornado.httpserver
 import tornado.ioloop
 
 log = logging.getLogger("food_truck_logger")
-log.setLevel(logging.WARNING)
+log.setLevel(logging.INFO)
 log.propagate = False
 
 ch = logging.StreamHandler()
@@ -85,7 +85,7 @@ class FoodTrucks(tornado.web.RequestHandler):
 
     def generate_response(self, result):
         log.debug("[FoodTrucks] Generating json response")
-        res = self.create_multidict(['response', ['text'], [self.SUCCESS, result]])
+        res = self.create_multidict(['response'], ['text'], [self.SUCCESS, result])
         return json.dumps(res)
 
     def get_cache(self):
@@ -136,7 +136,8 @@ class NearbyFoodTruckHandler(FoodTrucks):
             for index, foodtruck in enumerate(result_list[:]):
                 result_list[index]["dis"] = vincenty((self.latitude, self.longitude),
                                                  (result_list[index]["loc"][1], result_list[index]["loc"][0])).miles
-	    result_list = sorted(result_list, key=lambda x:x["dis"])
+	    if int(self.query_parameter["sort"]) == 0:
+	    	result_list = sorted(result_list, key=lambda x:x["dis"])
 
         return result_list
 
@@ -166,7 +167,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
 
     def generate_basic_bounds_query(self, latitude, longitude):
         log.debug("[NearbyFoodTruckHandler] Generate basic bounds query")
-        basic_bounds_query = self.create_multidict(['loc'], ['$geowithin'], ['$box'],
+        basic_bounds_query = self.create_multidict(['loc'], ['$geoWithin'], ['$box'],
                                                    [[longitude[0], latitude[0]], [longitude[1], latitude[1]]])
         return basic_bounds_query
 
@@ -221,10 +222,11 @@ class NearbyFoodTruckHandler(FoodTrucks):
                 query = self.generate_radius_query(latitude, longitude)
             else:
                 query = self.generate_distance_query(latitude, longitude)
-                if self.query_parameter["category_filter"]:
-                    query["facilitytype"] = self.query_parameter["category_filter"]
-                if self.query_parameter["status"]:
-                    query["status"] = self.query_parameter["status"]
+
+            if self.query_parameter["category_filter"]:
+                query["facilitytype"] = self.query_parameter["category_filter"]
+            if self.query_parameter["status"]:
+                query["status"] = self.query_parameter["status"]
         except Exception as e:
             log.error("[NearbyFoodTruckHandler] Error generating near point query: {0}".format(str(e)))
             raise e
@@ -270,7 +272,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
                 raise InvalidParameterError("multiple locations specified, cannot disambiguate")
         else:
             resultlist = self.get_cache()
-            if resultlist:
+            if resultlist is not None:
                 log.info("[NearbyFoodTruckHandler] Cache hit. Key={0}".format(str(self.query_parameter)))
                 return resultlist
             else:
@@ -343,7 +345,7 @@ class FoodTruckInfoHandler(FoodTrucks):
             raise MissingParameterError("name field is missing in query")
         else:
             resultlist = self.get_cache()
-            if resultlist:
+            if resultlist is not None:
                 log.info("[FoodTruckInfoHandler] cache hit. Key={0}".format(str(self.query_parameter)))
                 return resultlist
             else:
