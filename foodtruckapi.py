@@ -155,10 +155,12 @@ class NearbyFoodTruckHandler(FoodTrucks):
         @return:    filtered and sorted list
         """
         log.debug("[NearbyFoodTruckHandler] Getting correct sort order for result")
+        #Handling offset
         offset_query_result_list = geo_query_result_list[int(self.query_parameter["offset"]):]
         if not self.query_parameter["name"] and not self.query_parameter["fooditems"]:
                 result_list = offset_query_result_list
         else:
+            #search for name and type match and sort if needed
             applicant = self.query_parameter["name"] or ".*"
             fooditems = self.query_parameter["fooditems"] or ".*"
 
@@ -179,8 +181,9 @@ class NearbyFoodTruckHandler(FoodTrucks):
             for index, foodtruck in enumerate(result_list[:]):
                 result_list[index]["dis"] = vincenty((self.latitude, self.longitude),
                                                     (result_list[index]["loc"][1], result_list[index]["loc"][0])).miles
-        if int(self.query_parameter["sort"]) == 0:
-            result_list = sorted(result_list, key=lambda x: x["dis"])
+            #distance sort
+            if int(self.query_parameter["sort"]) == 0:
+                result_list = sorted(result_list, key=lambda x: x["dis"])
 
         return result_list
 
@@ -332,6 +335,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
     def search_food_truck(self):
         """Check cache, send query to get_all_nearby_foodtrucks if needed, put in cache
         """
+        #Handle ambiguous queries
         if (
             (self.query_parameter["location"] and self.query_parameter["bounds"])
             or (self.query_parameter["location"] and self.query_parameter["point"])
@@ -342,6 +346,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
                 log.warning("[NearbyFoodTruckHandler] Invalid query parameters")
                 raise InvalidParameterError("multiple locations specified, cannot disambiguate")
         else:
+            #check cache
             resultlist = self.get_cache()
             if resultlist is not None:
                 log.info("[NearbyFoodTruckHandler] Cache hit. Key={0}".format(str(self.query_parameter)))
@@ -365,6 +370,7 @@ class NearbyFoodTruckHandler(FoodTrucks):
                     log.debug("[NearbyFoodTruckHandler] processed request, result received")
                     for key, value in enumerate(resultlist[:]):
                         resultlist[key]["_id"] = key
+                    #put in cache
                     self.put_cache(resultlist)
                     return resultlist
 
@@ -420,6 +426,7 @@ class FoodTruckInfoHandler(FoodTrucks):
         if not self.query_parameter["name"]:
             raise MissingParameterError("name field is missing in query")
         else:
+            #Check cache
             resultlist = self.get_cache()
             if resultlist is not None:
                 log.info("[FoodTruckInfoHandler] cache hit. Key={0}".format(str(self.query_parameter)))
@@ -441,6 +448,7 @@ class FoodTruckInfoHandler(FoodTrucks):
                     for key, value in enumerate(result):
                         value["_id"] = key
                         resultlist.append(value)
+                    #Put in cache
                     self.put_cache(resultlist)
                     return resultlist
 
