@@ -85,6 +85,7 @@ Defines 3 handlers to handle static api docs, geo search and name search.
 Trade-offs you might have made, anything you left out, or what you might do differently if you were to spend additional time on the project
 
 Things that can be done in future:
+----------------------------------
 
 - Sync DB:
 The DataSF database might be updated at which point the mongoDB that's hosted as part of this project would become stale. We need to be able to sync databases live. For the current we can just create a new collection and have the app point to the new collection. And toggle this point on. For more data it requires dealing with the diff, the diff can just be a oplog of transactions and we can apply thos to the collection. The collection would be locked for the time period. Data might come out stale for reads till the collection is being updated. Indexes would need to be rebuilt.
