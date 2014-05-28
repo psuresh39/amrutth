@@ -23,7 +23,7 @@ Special mentions:
 
 Linode specifics: ssh moved to a different port, PermitRootLogin set to no, fail2ban to prevent dictionary attacks, setup firewall rules, auto reboot on kernel panic.
 
-Note: Project also supports https, but certificate is self signed and browsers may show a warning.
+Note: Project also supports https, but certificate is self signed and browsers may show a warning. API inspired by yelp search api.
 
 The technical track (1.5 years experience): backend (Tornado-python, Redis, mongoDB)
 
