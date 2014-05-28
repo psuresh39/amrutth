@@ -5,7 +5,7 @@ FOOD TRUCKS
 ------------
 A service that tells the user what types of food trucks might be found near a specific location on a map.
 
-Project is hosted on linode. Please visit www.amrutth.goz.cm/overview for API documentation.
+Project is hosted on linode. Please visit www.amrutth.goz.cm/overview.html for API documentation.
 
 Project is hosted on github: https://github.com/coolnay309/amrutth
 
