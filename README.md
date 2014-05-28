@@ -5,7 +5,7 @@ FOOD TRUCKS
 ------------
 A service that tells the user what types of food trucks might be found near a specific location on a map.
 
-Project is hosted on linode. Please visit www.amrutth.goz.cm/overview for API documentation.
+Project is hosted on linode. Please visit http://amrutth.goz.cm/overview.html for API documentation.
 
 Project is hosted on github: https://github.com/coolnay309/amrutth
 
@@ -22,6 +22,8 @@ Special mentions:
 - python-geoip (1.2) - to calculate location from ip address
 
 Linode specifics: ssh moved to a different port, PermitRootLogin set to no, fail2ban to prevent dictionary attacks, setup firewall rules, auto reboot on kernel panic.
+
+Note: Project also supports https, but certificate is self signed and browsers may show a warning. API inspired by yelp search api.
 
 The technical track (1.5 years experience): backend (Tornado-python, Redis, mongoDB)
 
